@@ -4,7 +4,7 @@ Now: EBK21 chkd13303@gmail.com
 ************************************/
 
 #include <obs-module.h>
-#include <obs-frontend-api/obs-frontend-api.h>
+#include <obs-frontend-api.h>
 #include <thread>
 #include <atomic>
 #include <sstream>
@@ -12,9 +12,9 @@ Now: EBK21 chkd13303@gmail.com
 
 extern "C"
 {
-        #include "SDL.h"
-        #include "SDL_thread.h"
-        #include "SDL_mixer.h"
+        #include <SDL2/SDL.h>
+        #include <SDL2/SDL_thread.h>
+        #include <SDL2/SDL_mixer.h>
 };
 
 std::mutex audioMutex;
@@ -56,7 +56,6 @@ void obs_module_unload(void)
         {
                 ps_sto_Thread.join();
         }
-        Mix_CloseAudio();
         SDL_Quit();
         return;
 }
@@ -81,6 +80,10 @@ void play_clip(const char *filepath)
 {
         Mix_Music* music;
         audioMutex.lock();
+        if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 1, 1024)!=0) {
+            audioMutex.unlock();
+            return;
+        }
         if(! (music = Mix_LoadMUS(filepath))) {
             audioMutex.unlock();
             return;
@@ -91,6 +94,7 @@ void play_clip(const char *filepath)
 		SDL_Delay(1);
 	}
 	Mix_FreeMusic(music);
+	Mix_CloseAudio();
         audioMutex.unlock();
         return;
 }
@@ -208,7 +212,6 @@ void obsstudio_srbeep_frontend_event_callback(enum obs_frontend_event event, voi
 
 bool obs_module_load(void)
 {
-        Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 1, 1024);
         obs_frontend_add_event_callback(obsstudio_srbeep_frontend_event_callback, 0);
         return true;
 }
