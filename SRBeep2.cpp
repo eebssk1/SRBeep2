@@ -10,19 +10,31 @@ Now: EBK21 chkd13303@gmail.com
 #include <sstream>
 #include <mutex>
 
-extern "C" {
-        #include <SDL.h>
-        #include <SDL_thread.h>
-        #include <SDL_mixer.h>
-};
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_thread.h>
+#include <SDL3_mixer/SDL_mixer.h>
+
+
+#define EXIT_WITH_ERROR(x) do { \
+        blog(LOG_ERROR, "Failed to play audio! At %s:%s", __FILE__, x); \
+        blog(LOG_ERROR, SDL_GetError()); \
+        goto exit; \
+} while(0)
 
 std::mutex audioMutex;
-std::thread st_stt_Thread, st_sto_Thread, rc_stt_Thread, rc_sto_Thread, bf_stt_Thread, bf_sto_Thread, ps_stt_Thread, ps_sto_Thread, ;
+std::thread st_stt_Thread, st_sto_Thread, rc_stt_Thread, rc_sto_Thread, bf_stt_Thread, bf_sto_Thread, ps_stt_Thread, ps_sto_Thread;
 std::atomic_int queue = 0;
+
+MIX_Mixer* sdlmixer = NULL;
+thread_local MIX_Audio* audio = NULL;
+thread_local MIX_Track* track = NULL;
 
 OBS_DECLARE_MODULE()
 
-void obs_module_unload(void) {
+extern "C" void obs_module_unload(void) {
         if (st_stt_Thread.joinable()) {
                 st_stt_Thread.join();
         }
@@ -47,45 +59,60 @@ void obs_module_unload(void) {
         if (ps_sto_Thread.joinable()) {
                 ps_sto_Thread.join();
         }
+        MIX_Quit();
         SDL_Quit();
         return;
 }
 
-const char * obs_module_author(void) {
+extern "C" const char * obs_module_author(void) {
         return "EBK21";
 }
 
-const char * obs_module_name(void) {
+extern "C" const char * obs_module_name(void) {
         return "Stream/Recording Start/Stop Beeps";
 }
 
-const char * obs_module_description(void) {
+extern "C" const char * obs_module_description(void) {
         return "Adds audio sound when streaming/recording/buffer starts/stops or when recording is paused/unpaused.";
 }
 
 void play_clip(const char * filepath) {
-        thread_local Mix_Music * music;
+        bool sound = false;
         ++queue;
         audioMutex.lock();
-        if (queue == 1) {
-                if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 1, 1024) != 0) {
-                        audioMutex.unlock();
-                        --queue;
-                        return;
+        if (likely(queue == 1)) {
+                sdlmixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+                if (unlikely(NULL == sdlmixer)) {
+                    audioMutex.unlock();
+                    EXIT_WITH_ERROR(__LINE__);
                 }
         }
         audioMutex.unlock();
-        if (!(music = Mix_LoadMUS(filepath))) {
-                --queue;
-                return;
+        audio = MIX_LoadAudio(NULL, filepath, false);
+        if (unlikely(NULL == audio))
+                EXIT_WITH_ERROR(__LINE__);
+
+        track = MIX_CreateTrack(sdlmixer);
+        if (unlikely(!track))
+                EXIT_WITH_ERROR(__LINE__);
+
+        if (unlikely(!MIX_SetTrackAudio(track, audio)))
+                EXIT_WITH_ERROR(__LINE__);
+
+        sound = MIX_PlayTrack(track, 0);
+
+        if (unlikely(!sound))
+                EXIT_WITH_ERROR(__LINE__);
+
+        while (MIX_TrackPlaying(track) && sound) {
+                SDL_Delay(60 + 30 * (queue - 1));
         }
-        Mix_PlayMusic(music, 0);
-        while (Mix_PlayingMusic() == 1) {
-                SDL_Delay(100 + 20 * (queue - 1));
-        }
-        Mix_FreeMusic(music);
+
+exit:
+        if(likely(NULL != track)) MIX_DestroyTrack(track);
+        if(likely(NULL != audio)) MIX_DestroyAudio(audio);
         --queue;
-        if (queue == 0) Mix_CloseAudio();
+        if (queue == 0 && NULL != sdlmixer) MIX_DestroyMixer(sdlmixer);
         return;
 }
 
@@ -170,7 +197,9 @@ void obsstudio_srbeep_frontend_event_callback(enum obs_frontend_event event, voi
         }
 }
 
-bool obs_module_load(void) {
+extern "C" bool obs_module_load(void) {
+        SDL_Init(0);
+        MIX_Init();
         obs_frontend_add_event_callback(obsstudio_srbeep_frontend_event_callback, 0);
         return true;
 }

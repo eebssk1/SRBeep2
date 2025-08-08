@@ -1,0 +1,11 @@
+LIBRARY SRBeep2.dll
+
+EXPORTS
+obs_current_module
+obs_module_author
+obs_module_description
+obs_module_load
+obs_module_name
+obs_module_set_pointer
+obs_module_unload
+obs_module_ver
