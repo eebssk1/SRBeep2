@@ -17,7 +17,7 @@ extern "C" {
 };
 
 std::mutex audioMutex;
-std::thread st_stt_Thread, st_sto_Thread, rc_stt_Thread, rc_sto_Thread, bf_stt_Thread, bf_sto_Thread, ps_stt_Thread, ps_sto_Thread;
+std::thread st_stt_Thread, st_sto_Thread, rc_stt_Thread, rc_sto_Thread, bf_stt_Thread, bf_sto_Thread, ps_stt_Thread, ps_sto_Thread, ;
 std::atomic_int queue = 0;
 
 OBS_DECLARE_MODULE()
@@ -81,7 +81,7 @@ void play_clip(const char * filepath) {
         }
         Mix_PlayMusic(music, 0);
         while (Mix_PlayingMusic() == 1) {
-                SDL_Delay(100 + 20 * queue - 1);
+                SDL_Delay(100 + 20 * (queue - 1));
         }
         Mix_FreeMusic(music);
         --queue;
