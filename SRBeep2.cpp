@@ -19,7 +19,7 @@ Now: EBK21 chkd13303@gmail.com
 
 
 #define EXIT_WITH_ERROR(x) do { \
-        blog(LOG_ERROR, "Failed to play audio! At %s:%s", __FILE__, x); \
+        blog(LOG_ERROR, "Failed to play audio! At %s:%d", __FILE__, x); \
         blog(LOG_ERROR, SDL_GetError()); \
         goto exit; \
 } while(0)
@@ -83,11 +83,9 @@ void play_clip(const char * filepath) {
         if (likely(queue == 1)) {
                 sdlmixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
                 if (unlikely(NULL == sdlmixer)) {
-                    audioMutex.unlock();
                     EXIT_WITH_ERROR(__LINE__);
                 }
         }
-        audioMutex.unlock();
         audio = MIX_LoadAudio(NULL, filepath, false);
         if (unlikely(NULL == audio))
                 EXIT_WITH_ERROR(__LINE__);
@@ -113,6 +111,7 @@ exit:
         if(likely(NULL != audio)) MIX_DestroyAudio(audio);
         --queue;
         if (queue == 0 && NULL != sdlmixer) MIX_DestroyMixer(sdlmixer);
+        audioMutex.unlock();
         return;
 }
 
